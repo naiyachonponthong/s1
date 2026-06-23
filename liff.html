@@ -147,6 +147,12 @@ body{ padding-bottom:74px; }
 .leave-item .meta{ color:var(--soft); font-size:12.5px; margin-top:3px; }
 .leave-item .rs{ font-size:13px; margin-top:6px; color:var(--ink); }
 
+/* ── Approval action buttons ── */
+.btn-approve{ width:100%; padding:14px; border:none; border-radius:12px; background:var(--green,#1f9d63); color:#fff; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+.btn-reject{ width:100%; padding:14px; border:2px solid var(--red,#d6453b); border-radius:12px; background:#fff; color:var(--red,#d6453b); font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
+/* ── Tab badge ── */
+#tabbar button{ position:relative; }
+.tab-badge{ position:absolute; top:4px; right:6px; background:var(--red,#d6453b); color:#fff; font-size:10px; font-weight:700; min-width:16px; height:16px; border-radius:8px; display:flex; align-items:center; justify-content:center; padding:0 4px; line-height:1; }
 /* ── Att rows ── */
 .att-row{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:11px 13px; margin-bottom:8px; display:flex; align-items:center; gap:11px; }
 .att-row .dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
@@ -211,6 +217,8 @@ const GAS_API_URL = "https://script.google.com/macros/s/AKfycbz-RBZQXhupciK9zOPp
 let LIFF_ID = '', PROFILE = null, USER_TYPE = '';
 let P = { children:[], leaves:[], attendance:[] };   // parent state
 let T = { user:null, leaves:[] };                    // teacher state
+let A = { leaves:[] };                               // approval queue state
+let CURRENT_APPROVAL_ID = null;
 let TAB = 'home', attKid = '', pendingPhoto = null;
 
 const LEAVE_TYPES_P = { sick:'ลาป่วย', personal:'ลากิจ', other:'อื่นๆ' };
@@ -296,8 +304,9 @@ function showTabbar(type){
       +'<button data-tab="leaves"><i class="fi fi-rr-document"></i>การลา</button>';
   } else {
     tb.innerHTML='<button class="on" data-tab="home"><i class="fi fi-rr-home"></i>หน้าหลัก</button>'
+      +'<button data-tab="tapprove" id="tbApprove"><i class="fi fi-rr-check-circle"></i>รออนุมัติ</button>'
       +'<button data-tab="tleave"><i class="fi fi-rr-add-document"></i>ยื่นใบลา</button>'
-      +'<button data-tab="thistory"><i class="fi fi-rr-time-past"></i>ประวัติการลา</button>';
+      +'<button data-tab="thistory"><i class="fi fi-rr-time-past"></i>ประวัติ</button>';
   }
   tb.classList.remove('hidden');
   tb.querySelectorAll('button').forEach(function(b){ b.onclick=function(){ renderTab(b.getAttribute('data-tab')); }; });
@@ -309,6 +318,7 @@ function renderTab(tab){
   if(tab==='home')     USER_TYPE==='parent'?renderParentHome():renderTeacherHome();
   if(tab==='att')      renderParentAtt();
   if(tab==='leaves')   renderParentLeaves();
+  if(tab==='tapprove') renderApprovalQueue();
   if(tab==='tleave')   renderTeacherLeaveForm();
   if(tab==='thistory') renderTeacherHistory();
 }
@@ -646,6 +656,145 @@ function buildTimeline(approvals){
   });
   return h+'</div>';
 }
+/* ══════════════════════════════════════════════════
+   APPROVAL QUEUE (ครู)
+   ══════════════════════════════════════════════════ */
+function renderApprovalQueue(){
+  render('<div class="loading"><div class="spin"></div>กำลังโหลด...</div>');
+  api('getLeavesForApproval',{line_user_id:PROFILE.userId}).then(function(res){
+    if(res.status!=='success'){ render('<div class="notice">'+esc(res.message||'เกิดข้อผิดพลาด')+'</div>'); return; }
+    A.leaves=res.leaves||[];
+    _updateApproveTabBadge(A.leaves.length);
+    if(!A.leaves.length){
+      render('<div class="sec-title">รออนุมัติจากฉัน</div>'
+        +'<div class="empty-box"><i class="fi fi-rr-check-circle" style="font-size:36px;color:var(--green)"></i>'
+        +'<div class="t" style="margin-top:10px">ไม่มีใบลารออนุมัติ</div></div>');
+      return;
+    }
+    let h='<div class="sec-title">รออนุมัติจากฉัน <span style="font-weight:400;color:var(--soft)">('+A.leaves.length+' รายการ)</span></div>';
+    A.leaves.forEach(function(l){ h+=buildApprovalCard(l); });
+    render(h);
+  }).catch(function(e){ render('<div class="notice">'+esc(String(e))+'</div>'); });
+}
+
+function _updateApproveTabBadge(n){
+  const btn=document.getElementById('tbApprove'); if(!btn) return;
+  const existing=btn.querySelector('.tab-badge'); if(existing) existing.remove();
+  if(n>0) btn.insertAdjacentHTML('beforeend','<span class="tab-badge">'+n+'</span>');
+}
+
+function buildApprovalCard(l){
+  const meta=LEAVE_META[l.leave_type]||LEAVE_META.other;
+  const isT=l.subject_type==='teacher';
+  const types=isT?LEAVE_TYPES_T:LEAVE_TYPES_P;
+  const personName=isT?(l.teacher_name||'-'):(l.student_name||'-');
+  return '<div class="lc" onclick="openApprovalDetail(\''+l.id+'\')">'
+    +'<div class="lc-stripe" style="background:'+meta.color+'"></div>'
+    +'<div class="lc-body">'
+      +'<div class="lc-top">'
+        +'<div class="lc-info">'
+          +'<div class="lc-type-ic" style="background:'+meta.bg+'"><i class="fi '+meta.icon+'" style="color:'+meta.color+'"></i></div>'
+          +'<div>'
+            +'<div class="lc-label">'+esc(personName)+'</div>'
+            +'<div class="lc-name" style="font-size:12px;color:var(--soft)">'+(isT?'ครู':'นักเรียน')+(l.class_name?' &bull; '+esc(l.class_name):'')+'</div>'
+            +'<div class="lc-meta">'+esc(types[l.leave_type]||l.leave_type)+' &bull; '+thaiDate(l.date_from)+(l.days?' ('+l.days+' วัน)':'')+'</div>'
+          +'</div>'
+        +'</div>'
+        +'<span class="badge b-pending" style="flex-shrink:0">รออนุมัติ</span>'
+      +'</div>'
+      +(l.reason?'<div class="lc-meta" style="margin-top:4px;color:var(--ink)">'+esc(l.reason)+'</div>':'')
+    +'</div>'
+  +'</div>';
+}
+
+function openApprovalDetail(leaveId){
+  const l=A.leaves.find(function(x){ return x.id===leaveId; }); if(!l) return;
+  CURRENT_APPROVAL_ID=leaveId;
+  LEAVE_DETAIL_BACK=function(){ renderTab('tapprove'); };
+  const types=l.subject_type==='teacher'?LEAVE_TYPES_T:LEAVE_TYPES_P;
+  const isT=l.subject_type==='teacher';
+  let h='<div class="detail-back" onclick="LEAVE_DETAIL_BACK&&LEAVE_DETAIL_BACK()">'
+    +'<i class="fi fi-rr-arrow-left"></i>ย้อนกลับ</div>';
+  const meta=LEAVE_META[l.leave_type]||LEAVE_META.other;
+  const typeName=types[l.leave_type]||l.leave_type;
+  const personName=isT?(l.teacher_name||'-'):(l.student_name||'-');
+  h+='<div class="detail-card">';
+  h+='<div class="detail-head">'
+    +'<div class="detail-type-ic" style="background:'+meta.bg+'"><i class="fi '+meta.icon+'" style="color:'+meta.color+'"></i></div>'
+    +'<div style="flex:1;min-width:0">'
+      +'<div class="detail-title">'+esc(typeName)+'</div>'
+      +'<div class="detail-sub">'+esc(personName)+(l.class_name?' &bull; '+esc(l.class_name):'')+'</div>'
+    +'</div>'
+    +'<span class="badge b-pending">รออนุมัติ</span>'
+  +'</div>';
+  h+='<div class="detail-row"><div class="detail-row-ic"><i class="fi fi-rr-calendar"></i></div>'
+    +'<div><div class="detail-lbl">วันที่ลา</div>'
+    +thaiDate(l.date_from)+(l.date_to&&l.date_to!==l.date_from?' &ndash; '+thaiDate(l.date_to):'')
+    +(l.days?' <span style="font-weight:600;color:var(--blue)">('+l.days+' วัน)</span>':'')
+    +'</div></div>';
+  if(l.reason) h+='<div class="detail-row"><div class="detail-row-ic"><i class="fi fi-rr-note"></i></div>'
+    +'<div><div class="detail-lbl">เหตุผล</div>'+esc(l.reason)+'</div></div>';
+  h+='</div>';
+  if(l.approvals&&l.approvals.length){
+    h+='<div class="detail-card">'
+      +'<div class="tl-sec-title"><i class="fi fi-rr-list-check" style="color:var(--blue)"></i>สายการอนุมัติ</div>'
+      +buildTimeline(l.approvals)
+    +'</div>';
+  }
+  h+='<div class="detail-card" style="display:flex;gap:10px;flex-direction:column">'
+    +'<button class="btn-approve" onclick="renderApprovalAction(\''+leaveId+'\',\'approve\')">'
+      +'<i class="fi fi-rr-check"></i> อนุมัติ</button>'
+    +'<button class="btn-reject" onclick="renderApprovalAction(\''+leaveId+'\',\'reject\')">'
+      +'<i class="fi fi-rr-cross-small"></i> ไม่อนุมัติ</button>'
+  +'</div>';
+  render(h); window.scrollTo(0,0);
+}
+
+function renderApprovalAction(leaveId,action){
+  const l=A.leaves.find(function(x){ return x.id===leaveId; }); if(!l) return;
+  const isApprove=action==='approve';
+  const types=l.subject_type==='teacher'?LEAVE_TYPES_T:LEAVE_TYPES_P;
+  const personName=l.subject_type==='teacher'?(l.teacher_name||'-'):(l.student_name||'-');
+  const apiAction=isApprove?'approveLeaveLiff':'rejectLeaveLiff';
+  const color=isApprove?'var(--green)':'var(--red)';
+  let h='<div class="detail-back" onclick="openApprovalDetail(\''+leaveId+'\')">'
+    +'<i class="fi fi-rr-arrow-left"></i>ย้อนกลับ</div>';
+  h+='<div class="detail-card">'
+    +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">'+(isApprove?'ยืนยันการอนุมัติ':'ระบุเหตุผลที่ไม่อนุมัติ')+'</div>'
+    +'<div style="font-size:14px;color:var(--soft);margin-bottom:16px">'+esc(personName)+' &mdash; '+esc(types[l.leave_type]||l.leave_type)+'</div>'
+    +'<div class="f-row"><label>'+(isApprove?'ความคิดเห็น (ไม่บังคับ)':'เหตุผล (บังคับ)')+'</label>'
+      +'<textarea class="f-ctl" id="approvalComment" rows="3" style="resize:vertical" placeholder="'+(isApprove?'ระบุความคิดเห็น หรือเว้นว่างไว้...':'กรุณาระบุเหตุผล...')+'"></textarea></div>'
+    +'<button id="btnConfirm" onclick="confirmApproval(\''+apiAction+'\','+(!isApprove)+')" style="width:100%;padding:14px;border:none;border-radius:12px;background:'+color+';color:#fff;font-size:15px;font-weight:700;cursor:pointer;margin-top:4px">'
+      +(isApprove?'<i class="fi fi-rr-check"></i> ยืนยันอนุมัติ':'<i class="fi fi-rr-cross-small"></i> ยืนยันไม่อนุมัติ')
+    +'</button>'
+    +'<button onclick="openApprovalDetail(\''+leaveId+'\')" style="width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--soft);font-size:14px;cursor:pointer;margin-top:8px">ยกเลิก</button>'
+  +'</div>';
+  render(h); window.scrollTo(0,0);
+}
+
+function confirmApproval(apiAction,requireComment){
+  const comment=(document.getElementById('approvalComment').value||'').trim();
+  if(requireComment&&!comment){ toast('กรุณาระบุเหตุผล'); return; }
+  const btn=document.getElementById('btnConfirm');
+  btn.disabled=true; btn.textContent='กำลังดำเนินการ...';
+  api(apiAction,{line_user_id:PROFILE.userId,leave_id:CURRENT_APPROVAL_ID,comment:comment}).then(function(res){
+    if(res.status==='success'){
+      toast(res.message||'ดำเนินการแล้ว');
+      Promise.all([
+        api('getLeavesForApproval',{line_user_id:PROFILE.userId}),
+        api('teacherLiffInit',{line_user_id:PROFILE.userId})
+      ]).then(function(results){
+        if(results[0].status==='success'){ A.leaves=results[0].leaves||[]; }
+        if(results[1].status==='success'){ T.user=results[1].user; T.leaves=results[1].leaves||[]; }
+        renderTab('tapprove');
+      });
+    } else {
+      toast(res.message||'เกิดข้อผิดพลาด');
+      btn.disabled=false; btn.textContent='ลองใหม่';
+    }
+  }).catch(function(e){ toast(String(e)); btn.disabled=false; });
+}
+
 function chipBtn(val,label,on,cls){ return '<div class="'+(cls||'chip')+(on?' on':'')+'" data-v="'+val+'">'+label+'</div>'; }
 function bindPhotoInput(inputId,prevId){
   document.getElementById(inputId).onchange=function(){
