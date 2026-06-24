@@ -17,6 +17,22 @@ body{ padding-bottom:74px; }
 .tabbar button i{ font-size:20px; }
 .tabbar button.on{ color:var(--blue); }
 
+/* ── App Header ── */
+.app-head{ display:flex; align-items:center; gap:10px; }
+.head-settings{ background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.3); border-radius:10px; color:#fff; width:36px; height:36px; display:flex; align-items:center; justify-content:center; font-size:17px; cursor:pointer; flex-shrink:0; }
+
+/* ── Settings Bottom Sheet ── */
+.sheet-overlay{ position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; }
+.sheet-overlay.hidden{ display:none; }
+.sheet-box{ background:#fff; border-radius:22px 22px 0 0; padding:12px 16px calc(20px + env(safe-area-inset-bottom)); width:100%; }
+.sheet-handle{ width:40px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 16px; }
+.sheet-title{ font-size:14px; font-weight:700; color:var(--soft); margin-bottom:10px; text-transform:uppercase; letter-spacing:.5px; }
+.sheet-item{ display:flex; align-items:center; gap:12px; width:100%; padding:14px 6px; border:none; background:none; font-family:inherit; font-size:15px; font-weight:500; color:var(--ink); cursor:pointer; border-bottom:1px solid var(--line); }
+.sheet-item:last-child{ border-bottom:none; }
+.sheet-item i{ font-size:18px; width:24px; text-align:center; color:var(--soft); }
+.sheet-item.danger{ color:#d6453b; }
+.sheet-item.danger i{ color:#d6453b; }
+
 /* ── Link / choice page ── */
 .choice-wrap{ padding:24px 0 8px; }
 .choice-card{
@@ -147,6 +163,10 @@ body{ padding-bottom:74px; }
 .leave-item .meta{ color:var(--soft); font-size:12.5px; margin-top:3px; }
 .leave-item .rs{ font-size:13px; margin-top:6px; color:var(--ink); }
 
+/* ── Sub-tabs (inside a page) ── */
+.sub-tabs{ display:flex; gap:0; background:var(--bg,#f5f6fb); border-radius:12px; padding:3px; margin-bottom:14px; }
+.sub-tab{ flex:1; text-align:center; padding:8px 4px; border-radius:9px; font-size:13.5px; font-weight:600; color:var(--soft); cursor:pointer; transition:background .15s,color .15s; }
+.sub-tab.on{ background:#fff; color:var(--ink); box-shadow:0 1px 4px rgba(40,50,90,.10); }
 /* ── Approval action buttons ── */
 .btn-approve{ width:100%; padding:14px; border:none; border-radius:12px; background:var(--green,#1f9d63); color:#fff; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
 .btn-reject{ width:100%; padding:14px; border:2px solid var(--red,#d6453b); border-radius:12px; background:#fff; color:var(--red,#d6453b); font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; }
@@ -195,8 +215,26 @@ body{ padding-bottom:74px; }
 <body>
 
 <div class="app-head">
-  <h1 id="appTitle">ระบบเช็คชื่อนักเรียน</h1>
-  <p id="headSub">กำลังเชื่อมต่อ...</p>
+  <div style="flex:1;min-width:0">
+    <h1 id="appTitle">ระบบเช็คชื่อนักเรียน</h1>
+    <p id="headSub">กำลังเชื่อมต่อ...</p>
+  </div>
+  <button id="btnSettings" class="head-settings hidden" onclick="showSettings()" title="ตั้งค่า">
+    <i class="fi fi-rr-settings"></i>
+  </button>
+</div>
+
+<div id="settingsSheet" class="sheet-overlay hidden" onclick="if(event.target===this)hideSettings()">
+  <div class="sheet-box">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">ตั้งค่า</div>
+    <button class="sheet-item danger" onclick="confirmUnlink()">
+      <i class="fi fi-rr-unlink"></i> ยกเลิกการเชื่อมต่อ LINE
+    </button>
+    <button class="sheet-item" onclick="hideSettings()">
+      <i class="fi fi-rr-cross-small"></i> ปิด
+    </button>
+  </div>
 </div>
 
 <div class="wrap" id="app">
@@ -278,6 +316,7 @@ async function loadUser(){
     P={children:pRes.children,leaves:pRes.leaves,attendance:pRes.attendance};
     document.getElementById('headSub').textContent='สวัสดีค่ะ คุณ'+pRes.parent.name;
     showTabbar('parent');
+    document.getElementById('btnSettings').classList.remove('hidden');
     renderTab('home'); return;
   }
   // ลอง teacher
@@ -287,10 +326,37 @@ async function loadUser(){
     T={user:tRes.user,leaves:tRes.leaves};
     document.getElementById('headSub').textContent='สวัสดีคุณครู '+tRes.user.name;
     showTabbar('teacher');
+    document.getElementById('btnSettings').classList.remove('hidden');
     renderTab('home'); return;
   }
   // ยังไม่ได้เชื่อม
   USER_TYPE=''; renderChoicePage();
+}
+
+/* ══════════════════════════════════════════════════
+   SETTINGS / UNLINK
+   ══════════════════════════════════════════════════ */
+function showSettings(){
+  document.getElementById('settingsSheet').classList.remove('hidden');
+}
+function hideSettings(){
+  document.getElementById('settingsSheet').classList.add('hidden');
+}
+function confirmUnlink(){
+  hideSettings();
+  const msg=USER_TYPE==='teacher'?'ยกเลิกการเชื่อมต่อบัญชีครู?\nจะต้องผูกบัญชีใหม่ในครั้งถัดไป'
+    :'ยกเลิกการเชื่อมต่อบัญชีผู้ปกครอง?\nจะต้องผูกบัญชีใหม่ในครั้งถัดไป';
+  if(!confirm(msg)) return;
+  const action=USER_TYPE==='teacher'?'unlinkLiff':'unlinkParentLiff';
+  api(action,{line_user_id:PROFILE.userId}).then(function(res){
+    if(res.status==='success'){
+      toast('ยกเลิกการเชื่อมต่อแล้ว');
+      USER_TYPE=''; P={children:[],leaves:[],attendance:[]}; T={user:null,leaves:[]}; A={leaves:[]};
+      document.getElementById('tabbar').classList.add('hidden');
+      document.getElementById('btnSettings').classList.add('hidden');
+      renderChoicePage();
+    } else { toast(res.message||'เกิดข้อผิดพลาด'); }
+  }).catch(function(e){ toast(String(e)); });
 }
 
 /* ══════════════════════════════════════════════════
@@ -366,6 +432,7 @@ async function doTeacherLink(){
     T={user:res.user,leaves:[]};
     document.getElementById('headSub').textContent='สวัสดีคุณครู '+res.user.name;
     showTabbar('teacher');
+    document.getElementById('btnSettings').classList.remove('hidden');
     const fresh=await api('teacherLiffInit',{line_user_id:PROFILE.userId});
     if(fresh.status==='success') T={user:fresh.user,leaves:fresh.leaves};
     renderTab('home');
@@ -659,22 +726,77 @@ function buildTimeline(approvals){
 /* ══════════════════════════════════════════════════
    APPROVAL QUEUE (ครู)
    ══════════════════════════════════════════════════ */
-function renderApprovalQueue(){
-  render('<div class="loading"><div class="spin"></div>กำลังโหลด...</div>');
+let APPROVE_SUB='queue'; // 'queue' | 'history'
+
+function renderApprovalQueue(sub){
+  if(sub) APPROVE_SUB=sub;
+  const subTabs='<div class="sub-tabs">'
+    +'<div class="sub-tab'+(APPROVE_SUB==='queue'?' on':'')+'" onclick="renderApprovalQueue(\'queue\')">รออนุมัติ</div>'
+    +'<div class="sub-tab'+(APPROVE_SUB==='history'?' on':'')+'" onclick="renderApprovalQueue(\'history\')">ประวัติการอนุมัติ</div>'
+    +'</div>';
+  render(subTabs+'<div class="loading"><div class="spin"></div>กำลังโหลด...</div>');
+  if(APPROVE_SUB==='history'){ _loadApprovalHistory(subTabs); return; }
   api('getLeavesForApproval',{line_user_id:PROFILE.userId}).then(function(res){
-    if(res.status!=='success'){ render('<div class="notice">'+esc(res.message||'เกิดข้อผิดพลาด')+'</div>'); return; }
+    if(res.status!=='success'){ render(subTabs+'<div class="notice">'+esc(res.message||'เกิดข้อผิดพลาด')+'</div>'); return; }
     A.leaves=res.leaves||[];
     _updateApproveTabBadge(A.leaves.length);
+    let h=subTabs;
     if(!A.leaves.length){
-      render('<div class="sec-title">รออนุมัติจากฉัน</div>'
-        +'<div class="empty-box"><i class="fi fi-rr-check-circle" style="font-size:36px;color:var(--green)"></i>'
-        +'<div class="t" style="margin-top:10px">ไม่มีใบลารออนุมัติ</div></div>');
-      return;
+      h+='<div class="empty-box"><i class="fi fi-rr-check-circle" style="font-size:36px;color:var(--green)"></i>'
+        +'<div class="t" style="margin-top:10px">ไม่มีใบลารออนุมัติ</div></div>';
+    } else {
+      h+='<div class="sec-title">รออนุมัติจากฉัน <span style="font-weight:400;color:var(--soft)">('+A.leaves.length+' รายการ)</span></div>';
+      A.leaves.forEach(function(l){ h+=buildApprovalCard(l); });
     }
-    let h='<div class="sec-title">รออนุมัติจากฉัน <span style="font-weight:400;color:var(--soft)">('+A.leaves.length+' รายการ)</span></div>';
-    A.leaves.forEach(function(l){ h+=buildApprovalCard(l); });
     render(h);
-  }).catch(function(e){ render('<div class="notice">'+esc(String(e))+'</div>'); });
+  }).catch(function(e){ render(subTabs+'<div class="notice">'+esc(String(e))+'</div>'); });
+}
+
+function _loadApprovalHistory(subTabs){
+  api('getApprovalHistory',{line_user_id:PROFILE.userId}).then(function(res){
+    if(res.status!=='success'){ render(subTabs+'<div class="notice">'+esc(res.message||'เกิดข้อผิดพลาด')+'</div>'); return; }
+    let h=subTabs;
+    if(!res.history||!res.history.length){
+      h+='<div class="empty-box"><i class="fi fi-rr-time-past" style="font-size:36px;color:var(--soft)"></i>'
+        +'<div class="t" style="margin-top:10px">ยังไม่มีประวัติการอนุมัติ</div></div>';
+    } else {
+      h+='<div class="sec-title">ประวัติการอนุมัติของฉัน <span style="font-weight:400;color:var(--soft)">('+res.history.length+' รายการ)</span></div>';
+      res.history.forEach(function(l){ h+=buildHistoryCard(l); });
+    }
+    render(h);
+  }).catch(function(e){ render(subTabs+'<div class="notice">'+esc(String(e))+'</div>'); });
+}
+
+function buildHistoryCard(l){
+  const meta=LEAVE_META[l.leave_type]||LEAVE_META.other;
+  const isT=l.subject_type==='teacher';
+  const types=isT?LEAVE_TYPES_T:LEAVE_TYPES_P;
+  const name=isT?(l.teacher_name||'-'):(l.student_name||'-');
+  const acted=l.acted_at?thaiDate(String(l.acted_at).split('T')[0]):'';
+  const myAction=l.my_action;
+  const acColor=myAction==='approved'?'var(--green)':'var(--red)';
+  const acIcon=myAction==='approved'?'fi-rr-check':'fi-rr-cross-small';
+  const acLabel=myAction==='approved'?'อนุมัติแล้ว':'ไม่อนุมัติ';
+  return '<div class="lc">'
+    +'<div class="lc-stripe" style="background:'+meta.color+'"></div>'
+    +'<div class="lc-body">'
+      +'<div class="lc-top">'
+        +'<div class="lc-info">'
+          +'<div class="lc-type-ic" style="background:'+meta.bg+'"><i class="fi '+meta.icon+'" style="color:'+meta.color+'"></i></div>'
+          +'<div>'
+            +'<div class="lc-label">'+esc(name)+'</div>'
+            +'<div class="lc-name">'+esc(types[l.leave_type]||l.leave_type)+' &bull; '+thaiDate(l.date_from)+(l.days?' ('+l.days+' วัน)':'')+'</div>'
+            +(acted?'<div class="lc-meta">ดำเนินการ '+acted+'</div>':'')
+          +'</div>'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">'
+          +'<span style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:'+acColor+'"><i class="fi '+acIcon+'"></i>'+acLabel+'</span>'
+          +(l.final_status!==l.my_action?'<span class="badge b-'+l.final_status+'" style="font-size:10.5px">'+(STATUS_TH[l.final_status]||l.final_status)+'</span>':'')
+        +'</div>'
+      +'</div>'
+      +(l.my_comment?'<div class="lc-meta" style="margin-top:4px;font-style:italic">&#x1F4AC; '+esc(l.my_comment)+'</div>':'')
+    +'</div>'
+  +'</div>';
 }
 
 function _updateApproveTabBadge(n){
