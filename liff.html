@@ -1015,87 +1015,89 @@ function renderAttendanceTab(){
   }).catch(function(e){ render('<div class="notice">'+esc(String(e))+'</div>'); });
 }
 
+const ATT_ORDER=['present','absent','late','leave'];
+
 function _renderAttForm(res){
   const thDate=thaiDate(res.date);
-  const statBtns=ATT_STATUS_LIFF.map(function(s){
-    return '<button class="att-status-btn" data-s="'+s.v+'" style="background:'+s.bg+';color:'+s.color+';border-color:'+s.color+'">'+s.label+'</button>';
-  }).join('');
-
-  let h='<div style="background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
-      +'<div>'
-        +'<div style="font-size:16px;font-weight:700">'+esc(res.class_name)+'</div>'
-        +'<div style="font-size:13px;color:var(--soft);margin-top:2px">'+thDate+' &bull; '+res.records.length+' คน'+(res.already_checked?' &bull; <span style="color:var(--green);font-weight:600">เช็คแล้ว</span>':'')+'</div>'
+  let h='<div style="background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      +'<div><div style="font-size:16px;font-weight:700">'+esc(res.class_name)+'</div>'
+        +'<div style="font-size:13px;color:var(--soft);margin-top:2px">'+thDate+' &bull; '+res.records.length+' คน'+(res.already_checked?' <span style="color:var(--green);font-weight:600">&bull; เช็คแล้ว</span>':'')+'</div>'
       +'</div>'
-      +'<input type="date" id="attDate" value="'+res.date+'" style="border:1.5px solid var(--line);border-radius:9px;padding:6px 10px;font-size:13px;font-family:inherit;color:var(--ink)">'
+      +'<input type="date" id="attDate" value="'+res.date+'"'
+        +' style="border:1.5px solid var(--line);border-radius:9px;padding:6px 8px;font-size:13px;font-family:inherit;color:var(--ink);max-width:130px">'
     +'</div></div>';
 
   h+='<div id="attSummaryBar" style="display:flex;gap:6px;margin-bottom:10px"></div>';
 
+  h+='<div style="font-size:12px;color:var(--soft);margin-bottom:8px;display:flex;align-items:center;gap:5px">'
+    +'<i class="fi fi-rr-tap" style="font-size:14px"></i>แตะชื่อเพื่อเปลี่ยนสถานะ</div>';
+
   h+='<div id="attList">';
-  res.records.forEach(function(st){
-    h+=_attStudentRow(st);
-  });
+  res.records.forEach(function(st){ h+=_attStudentRow(st); });
   h+='</div>';
 
-  h+='<button id="btnSaveAtt" onclick="saveAttendanceLiff()" style="width:100%;padding:14px;border:none;border-radius:14px;background:var(--green,#1f9d63);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px">'
+  h+='<button id="btnSaveAtt" onclick="saveAttendanceLiff()"'
+    +' style="width:100%;padding:14px;border:none;border-radius:14px;background:#1f9d63;color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;gap:8px">'
     +'<i class="fi fi-rr-disk"></i> บันทึกการเช็คชื่อ</button>';
 
   render(h);
 
-  // date picker
-  document.getElementById('attDate').onchange=function(){
-    ATT.date=this.value; renderAttendanceTab();
-  };
+  document.getElementById('attDate').onchange=function(){ ATT.date=this.value; renderAttendanceTab(); };
 
-  // status button delegation
   document.getElementById('attList').addEventListener('click',function(e){
-    const btn=e.target.closest('.att-status-btn'); if(!btn) return;
-    const row=btn.closest('.att-row-liff'); if(!row) return;
-    row.querySelectorAll('.att-status-btn').forEach(function(b){ b.classList.remove('active'); });
-    btn.classList.add('active');
+    const card=e.target.closest('.att-card'); if(!card) return;
+    const cur=card.getAttribute('data-s');
+    const next=ATT_ORDER[(ATT_ORDER.indexOf(cur)+1)%ATT_ORDER.length];
+    _setCardStatus(card,next);
     _updateAttSummary();
   });
 
   _updateAttSummary();
 }
 
+function _getStatusMeta(sv){
+  return ATT_STATUS_LIFF.find(function(s){ return s.v===sv; })||ATT_STATUS_LIFF[0];
+}
+
+function _setCardStatus(card,sv){
+  const m=_getStatusMeta(sv);
+  card.setAttribute('data-s',sv);
+  card.style.borderColor=m.color;
+  card.style.background=m.bg;
+  const badge=card.querySelector('.att-badge');
+  if(badge){ badge.textContent=m.label; badge.style.background=m.color; badge.style.color='#fff'; }
+}
+
 function _attStudentRow(st){
-  const btns=ATT_STATUS_LIFF.map(function(s){
-    const isOn=st.status===s.v;
-    return '<button class="att-status-btn'+(isOn?' active':'')+'" data-s="'+s.v+'"'
-      +' style="background:'+(isOn?s.color:'#fff')+';color:'+(isOn?'#fff':s.color)+';border:1.5px solid '+s.color+';border-radius:8px;padding:5px 10px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">'+s.label+'</button>';
-  }).join('');
-  return '<div class="att-row-liff" data-id="'+st.id+'" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:7px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
-      +(st.number?'<span style="min-width:28px;font-size:12px;color:var(--soft);text-align:center">'+esc(st.number)+'</span>':'')
-      +'<span style="font-size:14px;font-weight:600;flex:1">'+esc(st.name)+'</span>'
-    +'</div>'
-    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'+btns+'</div>'
+  const m=_getStatusMeta(st.status||'present');
+  return '<div class="att-card" data-id="'+st.id+'" data-s="'+m.v+'"'
+    +' style="border:2px solid '+m.color+';border-radius:14px;padding:13px 14px;margin-bottom:8px;background:'+m.bg+';cursor:pointer;display:flex;align-items:center;gap:10px;transition:border-color .15s,background .15s;user-select:none">'
+    +(st.number?'<span style="min-width:22px;font-size:12px;font-weight:700;color:'+m.color+';text-align:center">'+esc(st.number)+'</span>':'')
+    +'<span style="flex:1;font-size:15px;font-weight:600;color:var(--ink)">'+esc(st.name)+'</span>'
+    +'<span class="att-badge" style="background:'+m.color+';color:#fff;border-radius:20px;padding:4px 14px;font-size:13px;font-weight:700;flex-shrink:0">'+m.label+'</span>'
   +'</div>';
 }
 
 function _updateAttSummary(){
   const counts={present:0,absent:0,late:0,leave:0};
-  document.querySelectorAll('.att-row-liff').forEach(function(row){
-    const active=row.querySelector('.att-status-btn.active');
-    const s=active?active.getAttribute('data-s'):'present';
+  document.querySelectorAll('.att-card').forEach(function(card){
+    const s=card.getAttribute('data-s')||'present';
     if(counts[s]!=null) counts[s]++;
   });
   const bar=document.getElementById('attSummaryBar'); if(!bar) return;
   bar.innerHTML=ATT_STATUS_LIFF.map(function(s){
-    return '<div style="flex:1;text-align:center;background:'+s.bg+';color:'+s.color+';border-radius:9px;padding:6px 4px">'
-      +'<div style="font-size:17px;font-weight:700">'+counts[s.v]+'</div>'
-      +'<div style="font-size:11px;font-weight:600">'+s.label+'</div>'
+    return '<div style="flex:1;text-align:center;background:'+s.bg+';border-radius:10px;padding:8px 4px;border:2px solid '+(counts[s.v]>0?s.color:'transparent')+'">'
+      +'<div style="font-size:18px;font-weight:800;color:'+s.color+'">'+counts[s.v]+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:'+s.color+'">'+s.label+'</div>'
     +'</div>';
   }).join('');
 }
 
 async function saveAttendanceLiff(){
   const records=[];
-  document.querySelectorAll('.att-row-liff').forEach(function(row){
-    const active=row.querySelector('.att-status-btn.active');
-    records.push({ id:row.getAttribute('data-id'), status:active?active.getAttribute('data-s'):'present' });
+  document.querySelectorAll('.att-card').forEach(function(card){
+    records.push({ id:card.getAttribute('data-id'), status:card.getAttribute('data-s')||'present' });
   });
   if(!records.length){ toast('ไม่มีข้อมูลนักเรียน'); return; }
   const btn=document.getElementById('btnSaveAtt');
